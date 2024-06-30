@@ -1,0 +1,72 @@
+///**
+// * Licensed to the Apache Software Foundation (ASF) under one
+// * or more contributor license agreements. See the NOTICE file
+// * distributed with this work for additional information
+// * regarding copyright ownership. The ASF licenses this file
+// * to you under the Apache License, Version 2.0 (the
+// * "License"); you may not use this file except in compliance
+// * with the License. You may obtain a copy of the License at
+// *
+// * http://www.apache.org/licenses/LICENSE-2.0
+// *
+// * Unless required by applicable law or agreed to in writing,
+// * software distributed under the License is distributed on an
+// * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// * KIND, either express or implied. See the License for the
+// * specific language governing permissions and limitations
+// * under the License.
+// */
+//package org.apache.fineract.portfolio.loanaccount.service.rebate;
+//
+//import lombok.RequiredArgsConstructor;
+//import org.apache.fineract.infrastructure.security.service.PlatformSecurityContext;
+//import org.apache.fineract.portfolio.loanaccount.data.RebateData;
+//import org.springframework.jdbc.core.JdbcTemplate;
+//import org.springframework.jdbc.core.RowMapper;
+//import org.springframework.stereotype.Service;
+//
+//import java.math.BigDecimal;
+//import java.sql.ResultSet;
+//import java.sql.SQLException;
+//import java.util.Collection;
+//
+//@Service
+//@RequiredArgsConstructor
+//public class RebateReadPlatformServiceImpl implements RebateReadPlatformService {
+//
+//    private final JdbcTemplate jdbcTemplate;
+//    private final PlatformSecurityContext context;
+//
+//    @Override
+//    public Collection<RebateData> retrieveAllRebates() {
+//        this.context.authenticatedUser();
+//        final RebateMapper rm = new RebateMapper();
+//        final String sql = "select " + rm.rebateSchema();
+//        return this.jdbcTemplate.query(sql, rm); // NOSONAR
+//    }
+//
+//    private static final class RebateMapper implements RowMapper<RebateData> {
+//
+//        public String rebateSchema() {
+//            return " pr.id as id, pr.days_from as daysFrom, pr.days_to as daysTo, "
+//                    + "pr.rebate_percentage as rebatePercentage, pr.is_active as active from m_product_rebate pr ";
+//        }
+//
+//        public String productLoanRebateSchema() {
+//            return rebateSchema() + " join m_product_loan_rebate lr on lr.rebate_id = pr.id";
+//        }
+//
+//        RebateMapper() {}
+//
+//        @Override
+//        public RebateData mapRow(ResultSet resultSet, int i) throws SQLException {
+//            final Long id = resultSet.getLong("id");
+//            final Integer daysFrom = resultSet.getInt("daysFrom");
+//            final Integer daysTo = resultSet.getInt("daysTo");
+//            final BigDecimal rebatePercentage = resultSet.getBigDecimal("rebatePercentage");
+//            final boolean active = resultSet.getBoolean("active");
+//            return RebateData.instance(id, daysFrom, daysTo, rebatePercentage, active);
+//        }
+//
+//    }
+//}
