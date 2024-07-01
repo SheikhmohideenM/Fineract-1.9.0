@@ -160,18 +160,9 @@ import org.apache.fineract.portfolio.loanaccount.domain.LoanTransactionRepositor
 import org.apache.fineract.portfolio.loanaccount.domain.LoanTransactionType;
 import org.apache.fineract.portfolio.loanaccount.domain.rebateLoan.LoanRebatePolicy;
 import org.apache.fineract.portfolio.loanaccount.domain.rebateLoan.LoanRebatePolicyRepository;
-import org.apache.fineract.portfolio.loanaccount.exception.DateMismatchException;
-import org.apache.fineract.portfolio.loanaccount.exception.ExceedingTrancheCountException;
-import org.apache.fineract.portfolio.loanaccount.exception.InvalidLoanTransactionTypeException;
-import org.apache.fineract.portfolio.loanaccount.exception.InvalidPaidInAdvanceAmountException;
-import org.apache.fineract.portfolio.loanaccount.exception.LoanForeclosureException;
-import org.apache.fineract.portfolio.loanaccount.exception.LoanMultiDisbursementException;
-import org.apache.fineract.portfolio.loanaccount.exception.LoanOfficerAssignmentException;
-import org.apache.fineract.portfolio.loanaccount.exception.LoanOfficerUnassignmentException;
-import org.apache.fineract.portfolio.loanaccount.exception.LoanTransactionNotFoundException;
-import org.apache.fineract.portfolio.loanaccount.exception.MultiDisbursementDataNotAllowedException;
-import org.apache.fineract.portfolio.loanaccount.exception.MultiDisbursementDataRequiredException;
+import org.apache.fineract.portfolio.loanaccount.exception.*;
 import org.apache.fineract.portfolio.loanaccount.guarantor.service.GuarantorDomainService;
+import org.apache.fineract.portfolio.loanaccount.loanschedule.domain.LoanApplicationTerms;
 import org.apache.fineract.portfolio.loanaccount.loanschedule.domain.LoanScheduleModel;
 import org.apache.fineract.portfolio.loanaccount.loanschedule.domain.LoanScheduleModelPeriod;
 import org.apache.fineract.portfolio.loanaccount.loanschedule.service.LoanScheduleHistoryWritePlatformService;
@@ -2853,16 +2844,48 @@ public class LoanWritePlatformServiceJpaRepositoryImpl implements LoanWritePlatf
         }
 
         BigDecimal principal = loan.getPrincipal().getAmount();
-        BigDecimal rebatePercentageDecimal = rebatePercentage.divide(BigDecimal.valueOf(100));
-        BigDecimal waiveInterest = principal.multiply(rebatePercentageDecimal).setScale(2, RoundingMode.HALF_UP);
+        Money principel = loan.getPrincipal();
+        //BigDecimal rebatePercentageDecimal = rebatePercentage;
+        //BigDecimal waiveInterest = principal.multiply(rebatePercentageDecimal).setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal annualNominalInterestRate = loan.getLoanProduct().getNominalInterestRatePerPeriod();
+        LocalDate disbursementDate = loan.getDisbursementDate();
+        LocalDate maturityDate = loan.getMaturityDate();
+
+        Integer numberOfRepayments = loan.loanProduct().getNumberOfRepayments();
+
+        LoanApplicationTerms loanApplicationTerms = new LoanApplicationTerms(
+                null,null, null,numberOfRepayments,null,
+                null, null, null, null, null,
+                null, null, annualNominalInterestRate, null,
+                false, principel, disbursementDate, maturityDate, null,
+                null, null, null, null,
+                null, null, false, null, null,
+                null,
+                null, null, null, false, null,
+                null, null, null, null,
+                null,
+                null, null, null,
+                null, null, null, null,
+                null, null, false, null,
+                false, false, false, false, null,
+                false, false, null,
+                false, null, null, false,
+                null, null
+        );
+
+        BigDecimal baseInterestRate = loanApplicationTerms.getAnnualNominalInterestRate();
+        if (baseInterestRate == null) {
+            throw new InterestRateNotFoundException("Interest rate not found for the loan.");
+        }
 
         if (rebatePercentage.compareTo(BigDecimal.ZERO) == 0) {
             throw new RebateNotFoundException("No applicable rebate policy found for the loan term.");
         }
 
-        LoanRebatePolicy loanRebatePolicy = new LoanRebatePolicy(daysFrom, daysTo,
-                rebatePercentage, true, loanId);
-        loanrebatePolicyRepository.save(loanRebatePolicy);
+        BigDecimal effectiveInterestRate = baseInterestRate.subtract(rebatePercentage);
+        BigDecimal expectedWaiver = calculateExpectedWaiver(principal, effectiveInterestRate);
+        BigDecimal waiveInterest = expectedWaiver.setScale(2, RoundingMode.HALF_UP);
 
         Map<String, Object> response = new HashMap<>();
         Date date = new Date();
@@ -2886,10 +2909,17 @@ public class LoanWritePlatformServiceJpaRepositoryImpl implements LoanWritePlatf
         JsonCommand command = JsonCommand.from(waiveObj.toString(), parsedCommand, this.fromApiJsonHelper, null, null, null,
                 null, null, null, null, null, null, null, null, null);
 
+        LoanRebatePolicy loanRebatePolicy = new LoanRebatePolicy(daysFrom, daysTo,
+                rebatePercentage, true, loanId);
+        loanrebatePolicyRepository.save(loanRebatePolicy);
 
         waiveInterestOnLoan(loanId, command);
 
         return ResponseEntity.ok(response);
+    }
+
+    private BigDecimal calculateExpectedWaiver(BigDecimal principal, BigDecimal effectiveInterestRate) {
+        return principal.multiply(effectiveInterestRate).divide(BigDecimal.valueOf(100), RoundingMode.HALF_UP);
     }
 
     private void validateIsMultiDisbursalLoanAndDisbursedMoreThanOneTranche(Loan loan) {
