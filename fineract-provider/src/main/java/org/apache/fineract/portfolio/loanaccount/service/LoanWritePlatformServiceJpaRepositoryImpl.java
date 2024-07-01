@@ -2877,7 +2877,7 @@ public class LoanWritePlatformServiceJpaRepositoryImpl implements LoanWritePlatf
                 null, null, null, null, null, null, null, null, null);
 
 
-        this.waiveInterestOnLoan(loanId, command);
+        waiveInterestOnLoan(loanId, command);
 
         return ResponseEntity.ok(response);
     }
