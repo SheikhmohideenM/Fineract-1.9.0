@@ -78,6 +78,15 @@ public final class JsonCommand {
 
     }
 
+    public static JsonCommand from(final String jsonCommand, final JsonElement parsedCommand, final FromJsonHelper fromApiJsonHelper,
+                                   final String entityName, final Long resourceId, final Long subresourceId, final Long groupId, final Long clientId,
+                                   final Long loanId, final Long savingsId, final String transactionId, final String url, final Long productId,
+                                   final Long creditBureauId, final Long organisationCreditBureauId) {
+        return new JsonCommand(null,jsonCommand,parsedCommand, fromApiJsonHelper, entityName,
+                resourceId, subresourceId, groupId, clientId, loanId, savingsId, transactionId, url, productId, creditBureauId, organisationCreditBureauId, null);
+
+    }
+
     public static JsonCommand fromExistingCommand(final Long commandId, final String jsonCommand, final JsonElement parsedCommand,
             final FromJsonHelper fromApiJsonHelper, final String entityName, final Long resourceId, final Long subresourceId,
             final String url, final Long productId, final Long creditBureauId, final Long organisationCreditBureauId,
@@ -188,6 +197,8 @@ public final class JsonCommand {
         return new JsonCommand(null, jsonCommand, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
 
     }
+
+
 
     public Long getOrganisationCreditBureauId() {
         return this.organisationCreditBureauId;

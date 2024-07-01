@@ -22,10 +22,12 @@ import java.math.BigDecimal;
 import org.apache.fineract.organisation.monetary.domain.MonetaryCurrency;
 import org.apache.fineract.organisation.monetary.domain.Money;
 import org.apache.fineract.portfolio.common.domain.PeriodFrequencyType;
+import org.springframework.stereotype.Service;
 
 /**
  * Represents the bare minimum repayment details needed for activities related to generating repayment schedules.
  */
+@Service
 public interface LoanProductMinimumRepaymentScheduleRelatedDetail {
 
     MonetaryCurrency getCurrency();

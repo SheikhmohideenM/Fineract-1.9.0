@@ -24,18 +24,13 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import io.github.resilience4j.retry.annotation.Retry;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.time.temporal.ChronoUnit;
+import java.util.*;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -136,6 +131,7 @@ import org.apache.fineract.portfolio.group.exception.GroupNotActiveException;
 import org.apache.fineract.portfolio.loanaccount.api.LoanApiConstants;
 import org.apache.fineract.portfolio.loanaccount.command.LoanUpdateCommand;
 import org.apache.fineract.portfolio.loanaccount.data.HolidayDetailDTO;
+import org.apache.fineract.portfolio.loanaccount.data.RebateData;
 import org.apache.fineract.portfolio.loanaccount.data.ScheduleGeneratorDTO;
 import org.apache.fineract.portfolio.loanaccount.domain.ChangedTransactionDetail;
 import org.apache.fineract.portfolio.loanaccount.domain.GLIMAccountInfoRepository;
@@ -177,12 +173,15 @@ import org.apache.fineract.portfolio.loanaccount.guarantor.service.GuarantorDoma
 import org.apache.fineract.portfolio.loanaccount.loanschedule.domain.LoanScheduleModel;
 import org.apache.fineract.portfolio.loanaccount.loanschedule.domain.LoanScheduleModelPeriod;
 import org.apache.fineract.portfolio.loanaccount.loanschedule.service.LoanScheduleHistoryWritePlatformService;
+import org.apache.fineract.portfolio.loanaccount.rebate.RebateReadPlatformService;
 import org.apache.fineract.portfolio.loanaccount.rescheduleloan.domain.LoanRescheduleRequest;
 import org.apache.fineract.portfolio.loanaccount.serialization.LoanApplicationCommandFromApiJsonHelper;
 import org.apache.fineract.portfolio.loanaccount.serialization.LoanEventApiJsonValidator;
 import org.apache.fineract.portfolio.loanaccount.serialization.LoanUpdateCommandFromApiJsonDeserializer;
 import org.apache.fineract.portfolio.loanproduct.domain.LoanProduct;
+import org.apache.fineract.portfolio.loanproduct.domain.LoanProductMinimumRepaymentScheduleRelatedDetail;
 import org.apache.fineract.portfolio.loanproduct.exception.LinkedAccountRequiredException;
+import org.apache.fineract.portfolio.loanproduct.exception.RebateNotFoundException;
 import org.apache.fineract.portfolio.note.domain.Note;
 import org.apache.fineract.portfolio.note.domain.NoteRepository;
 import org.apache.fineract.portfolio.paymentdetail.domain.PaymentDetail;
@@ -193,7 +192,10 @@ import org.apache.fineract.portfolio.repaymentwithpostdatedchecks.service.Repaym
 import org.apache.fineract.portfolio.savings.domain.SavingsAccount;
 import org.apache.fineract.portfolio.transfer.api.TransferApiConstants;
 import org.apache.fineract.useradministration.domain.AppUser;
+import org.codehaus.jettison.json.JSONException;
+import org.codehaus.jettison.json.JSONObject;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.ResponseEntity;
 import org.springframework.orm.jpa.JpaSystemException;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -247,6 +249,9 @@ public class LoanWritePlatformServiceJpaRepositoryImpl implements LoanWritePlatf
     private final LoanAccrualTransactionBusinessEventService loanAccrualTransactionBusinessEventService;
     private final ErrorHandler errorHandler;
     private final LoanDownPaymentHandlerService loanDownPaymentHandlerService;
+
+    private final RebateReadPlatformService rebateReadPlatformService;
+    //private final LoanProductMinimumRepaymentScheduleRelatedDetail loanProductMinimumRepaymentScheduleRelatedDetail;
 
     @Transactional
     @Override
@@ -2824,6 +2829,57 @@ public class LoanWritePlatformServiceJpaRepositoryImpl implements LoanWritePlatf
                 .withEntityId(chargedOffTransaction.getId()) //
                 .withEntityExternalId(chargedOffTransaction.getExternalId()) //
                 .build();
+    }
+
+    @Override
+    public ResponseEntity<?> createRebateLoanTransaction(Long loanId) throws JSONException {
+        final Loan loan = this.loanAssembler.assembleFrom(loanId);
+        long loanTermInDays = ChronoUnit.DAYS.between(loan.getDisbursementDate(), loan.getMaturityDate());
+        BigDecimal rebatePercentage = BigDecimal.ZERO;
+
+        Collection<RebateData> rebatePolicies = rebateReadPlatformService.retrieveAllRebates();
+
+        for (RebateData rebatePolicy : rebatePolicies) {
+            if (rebatePolicy.getDaysFrom() <= loanTermInDays && rebatePolicy.getDaysTo() >= loanTermInDays) {
+                rebatePercentage = rebatePolicy.getRebatePercentage();
+                break;
+            }
+        }
+
+        BigDecimal principal = loan.getPrincipal().getAmount();
+        BigDecimal rebatePercentageDecimal = rebatePercentage.divide(BigDecimal.valueOf(100));
+        BigDecimal waiveInterest = principal.multiply(rebatePercentageDecimal).setScale(2, RoundingMode.HALF_UP);
+
+        if (rebatePercentage.compareTo(BigDecimal.ZERO) == 0) {
+            throw new RebateNotFoundException("No applicable rebate policy found for the loan term.");
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        Date date = new Date();
+        SimpleDateFormat formatter = new SimpleDateFormat("dd MMMM yyyy");
+        String strDate = formatter.format(date);
+        System.out.println("Date Format with dd MMMM yyyy : " + strDate);
+        response.put("transactionDate", strDate);
+        response.put("rebateAmount", waiveInterest);
+        response.put("rebatePercentage", rebatePercentage);
+        response.put("note", "Interest Rebate");
+
+        JSONObject waiveObj = new JSONObject();
+        waiveObj.put("transactionDate", strDate);
+        waiveObj.put("dateFormat", "dd MMMM yyyy");
+        waiveObj.put("locale", "en");
+        waiveObj.put("transactionAmount", waiveInterest);
+        waiveObj.put("note", "Interest Rebate");
+
+        final JsonElement parsedCommand = this.fromApiJsonHelper.parse(waiveObj.toString());
+
+        JsonCommand command = JsonCommand.from(waiveObj.toString(), parsedCommand, this.fromApiJsonHelper, null, null, null,
+                null, null, null, null, null, null, null, null, null);
+
+
+        this.waiveInterestOnLoan(loanId, command);
+
+        return ResponseEntity.ok(response);
     }
 
     private void validateIsMultiDisbursalLoanAndDisbursedMoreThanOneTranche(Loan loan) {

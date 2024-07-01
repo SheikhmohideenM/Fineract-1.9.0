@@ -490,31 +490,26 @@ public class LoanReadPlatformServiceImpl implements LoanReadPlatformService, Loa
 
     @Override
     public LoanTransactionData retrieveWaiveInterestDetails(final Long loanId) {
+
+        // TODO - KW -OPTIMIZE - write simple sql query to fetch back overdue
+        // interest that can be waived along with the date of repayment period
+        // interest is overdue.
         final Loan loan = this.loanRepositoryWrapper.findOneWithNotFoundDetection(loanId, true);
         final MonetaryCurrency currency = loan.getCurrency();
         final ApplicationCurrency applicationCurrency = this.applicationCurrencyRepository.findOneWithNotFoundDetection(currency);
         final CurrencyData currencyData = applicationCurrency.toData();
-        Collection<RebateData> rebatePolicies = rebateReadPlatformService.retrieveAllRebates();
-        BigDecimal loanAmount = loan.getPrincipal().getAmount(); // Assuming getPrincipal() returns a Money object and getAmount() returns BigDecimal
 
-        // Calculate rebate amount based on loan's disbursement date and rebate policies
-        BigDecimal rebateAmount = calculateRebate(loan.getDisbursementDate(), LocalDate.now(), rebatePolicies, loanAmount);
-
-        // Create waive of interest transaction
         final LoanTransaction waiveOfInterest = loan.deriveDefaultInterestWaiverTransaction();
 
         final LoanTransactionEnumData transactionType = LoanEnumerations.transactionType(LoanTransactionType.WAIVE_INTEREST);
 
-        BigDecimal amount = waiveOfInterest.getAmount(currency).getAmount().subtract(rebateAmount);
-        final BigDecimal outstandingLoanBalance = null; // You need to calculate this if needed
-        final BigDecimal unrecognizedIncomePortion = null; // Similarly calculate if needed
-
-        // Adjust amount by subtracting rebateAmount
-        amount = amount.subtract(rebateAmount);
+        final BigDecimal amount = waiveOfInterest.getAmount(currency).getAmount();
+        final BigDecimal outstandingLoanBalance = null;
+        final BigDecimal unrecognizedIncomePortion = null;
 
         return new LoanTransactionData(null, null, null, transactionType, null, currencyData, waiveOfInterest.getTransactionDate(), amount,
                 loan.getNetDisbursalAmount(), null, null, null, null, null, ExternalId.empty(), null, null, outstandingLoanBalance,
-                unrecognizedIncomePortion, false, loanId, loan.getExternalId(), rebatePolicies);
+                unrecognizedIncomePortion, false, loanId, loan.getExternalId(), null);
     }
 
     @Override
