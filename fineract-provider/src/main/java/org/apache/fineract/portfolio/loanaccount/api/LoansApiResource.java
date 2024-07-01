@@ -825,18 +825,6 @@ public class LoansApiResource {
         }
     }
 
-//    @PostMapping(value = "{loanId}/rebateLoans", produces = MediaType.APPLICATION_JSON)
-//    @CrossOrigin(origins = "http://localhost:4200")
-//    public ResponseEntity<?> rebateLoanTransaction(
-//            @PathParam("loanId") @Parameter(description = "loanId", required = true) final Long loanId) {
-//        try {
-//            return this.loanWritePlatformService.createRebateLoanTransaction(loanId);
-//        } catch (Exception e) {
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
-//        }
-//    }
-
-
     private String retrieveApprovalTemplate(final Long loanId, final String loanExternalIdStr, final String templateType,
             final UriInfo uriInfo) {
         this.context.authenticatedUser().validateHasReadPermission(RESOURCE_NAME_FOR_PERMISSIONS);

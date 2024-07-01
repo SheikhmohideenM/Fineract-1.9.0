@@ -158,6 +158,8 @@ import org.apache.fineract.portfolio.loanaccount.domain.LoanTransactionRelationR
 import org.apache.fineract.portfolio.loanaccount.domain.LoanTransactionRelationTypeEnum;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanTransactionRepository;
 import org.apache.fineract.portfolio.loanaccount.domain.LoanTransactionType;
+import org.apache.fineract.portfolio.loanaccount.domain.rebateLoan.LoanRebatePolicy;
+import org.apache.fineract.portfolio.loanaccount.domain.rebateLoan.LoanRebatePolicyRepository;
 import org.apache.fineract.portfolio.loanaccount.exception.DateMismatchException;
 import org.apache.fineract.portfolio.loanaccount.exception.ExceedingTrancheCountException;
 import org.apache.fineract.portfolio.loanaccount.exception.InvalidLoanTransactionTypeException;
@@ -251,7 +253,7 @@ public class LoanWritePlatformServiceJpaRepositoryImpl implements LoanWritePlatf
     private final LoanDownPaymentHandlerService loanDownPaymentHandlerService;
 
     private final RebateReadPlatformService rebateReadPlatformService;
-    //private final LoanProductMinimumRepaymentScheduleRelatedDetail loanProductMinimumRepaymentScheduleRelatedDetail;
+    private final LoanRebatePolicyRepository loanrebatePolicyRepository;
 
     @Transactional
     @Override
@@ -2836,12 +2838,16 @@ public class LoanWritePlatformServiceJpaRepositoryImpl implements LoanWritePlatf
         final Loan loan = this.loanAssembler.assembleFrom(loanId);
         long loanTermInDays = ChronoUnit.DAYS.between(loan.getDisbursementDate(), loan.getMaturityDate());
         BigDecimal rebatePercentage = BigDecimal.ZERO;
+        Integer daysFrom = null;
+        Integer daysTo = null;
 
         Collection<RebateData> rebatePolicies = rebateReadPlatformService.retrieveAllRebates();
 
         for (RebateData rebatePolicy : rebatePolicies) {
             if (rebatePolicy.getDaysFrom() <= loanTermInDays && rebatePolicy.getDaysTo() >= loanTermInDays) {
                 rebatePercentage = rebatePolicy.getRebatePercentage();
+                daysFrom = rebatePolicy.getDaysFrom();
+                daysTo = rebatePolicy.getDaysTo();
                 break;
             }
         }
@@ -2853,6 +2859,10 @@ public class LoanWritePlatformServiceJpaRepositoryImpl implements LoanWritePlatf
         if (rebatePercentage.compareTo(BigDecimal.ZERO) == 0) {
             throw new RebateNotFoundException("No applicable rebate policy found for the loan term.");
         }
+
+        LoanRebatePolicy loanRebatePolicy = new LoanRebatePolicy(daysFrom, daysTo,
+                rebatePercentage, true, loanId);
+        loanrebatePolicyRepository.save(loanRebatePolicy);
 
         Map<String, Object> response = new HashMap<>();
         Date date = new Date();
